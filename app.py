@@ -238,6 +238,7 @@ def generate_live_guide(app_name):
     response = client.responses.create(
         model="gpt-6-luna",
         tools=[{"type": "web_search", "search_context_size": "low"}],
+        include=["web_search_call.action.sources"],
         tool_choice="required",
         max_tool_calls=3,
         max_output_tokens=3000,
@@ -262,6 +263,7 @@ Separate each item with labels: Official documentation, Estimate, Unknown, Human
 ## Sources
 List source titles as Markdown links, prioritizing official provider documentation. If no official source could be verified for a claim, leave it Unknown rather than cite a guessed URL.""",
     )
+    st.session_state["live_guide_search_diagnostics"] = response_search_diagnostics(response)
     if getattr(response, "status", None) == "incomplete":
         details = getattr(response, "incomplete_details", None)
         reason = getattr(details, "reason", None) or "output limit reached"
@@ -283,6 +285,48 @@ def response_citations(response):
                 if url and (title, url) not in citations:
                     citations.append((title, url))
     return citations
+
+
+def response_search_diagnostics(response):
+    actions = []
+    for item in getattr(response, "output", []):
+        if getattr(item, "type", None) != "web_search_call":
+            continue
+
+        action = getattr(item, "action", None)
+        action_type = getattr(action, "type", None) or "Not returned"
+        queries = getattr(action, "queries", None)
+        if not queries:
+            query = getattr(action, "query", None)
+            queries = [query] if query else []
+        sources = getattr(action, "sources", None)
+        action_fields = getattr(action, "model_fields_set", set())
+        source_urls = [
+            url for url in (getattr(source, "url", None) for source in (sources or [])) if url
+        ]
+
+        page_url = getattr(action, "url", None)
+        if page_url and page_url not in source_urls:
+            source_urls.append(page_url)
+
+        actions.append(
+            {
+                "type": action_type,
+                "queries": queries or ["Not returned"],
+                "source_urls": source_urls,
+                "source_info_returned": (
+                    "sources" in action_fields or sources is not None or page_url is not None
+                ),
+                "pattern": getattr(action, "pattern", None) or "Not returned",
+            }
+        )
+
+    citations = response_citations(response)
+    return {
+        "search_call_count": len(actions),
+        "actions": actions,
+        "final_citations": citations,
+    }
 
 
 st.markdown(
@@ -320,6 +364,7 @@ if mode == "Generate new guide":
         else:
             st.session_state.pop("live_guide_text", None)
             st.session_state.pop("live_guide_sources", None)
+            st.session_state.pop("live_guide_search_diagnostics", None)
             try:
                 with st.spinner("Searching official documentation and preparing the guide…"):
                     response = generate_live_guide(app_name.strip())
@@ -467,6 +512,37 @@ else:
 
 with st.expander("Developer tools", expanded=False):
     st.caption("The connection test makes one small OpenAI web-search request. It does not generate or save a guide.")
+    diagnostics = st.session_state.get("live_guide_search_diagnostics")
+    if diagnostics is not None:
+        st.subheader("Latest guide research diagnostics")
+        st.write(f"Web-search call output items: {diagnostics['search_call_count']}")
+        if diagnostics["actions"]:
+            st.markdown("**Search actions and sources consulted**")
+            for index, action in enumerate(diagnostics["actions"], start=1):
+                st.markdown(f"**Action {index}:** {action['type']}")
+                st.markdown("Queries: " + "; ".join(action["queries"]))
+                st.markdown("Sources/pages consulted returned by this action:")
+                if not action["source_info_returned"]:
+                    st.markdown("- Not returned")
+                elif not action["source_urls"]:
+                    st.markdown("- No source URLs returned")
+                else:
+                    for url in action["source_urls"][:15]:
+                        st.markdown(f"- [{url}]({url})")
+                    if len(action["source_urls"]) > 15:
+                        st.caption(f"{len(action['source_urls']) - 15} additional URLs not shown")
+                if action["pattern"] != "Not returned":
+                    st.markdown(f"Find-in-page pattern: {action['pattern']}")
+        else:
+            st.markdown("Search actions, queries, and sources consulted: Not returned")
+
+        st.markdown("**Citations in the generated guide response**")
+        if diagnostics["final_citations"]:
+            for title, url in diagnostics["final_citations"]:
+                st.markdown(f"- [{title}]({url})")
+        else:
+            st.markdown("Not returned")
+
     if st.button("Test API connection"):
         try:
             client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"], max_retries=0)
