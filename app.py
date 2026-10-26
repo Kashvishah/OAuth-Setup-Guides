@@ -75,7 +75,7 @@ GUIDES = {
         "approval_note": "Depends on the target organization’s access restrictions; no timing estimate.",
         "before": [
             ("Official documentation", f"An OAuth App can be created under your personal account or an organization where you have administrative access. Use only public information in its registration details. [Create an OAuth App]({SOURCES['github_create']})"),
-            ("Human decision", "Decide whether an OAuth App fits the integration. GitHub generally prefers GitHub Apps for their finer-grained permissions and repository controls. [GitHub App vs OAuth App]({SOURCES['github_differences']})"),
+            ("Human decision", f"Decide whether an OAuth App fits the integration. GitHub generally prefers GitHub Apps for their finer-grained permissions and repository controls. [GitHub App vs OAuth App]({SOURCES['github_differences']})"),
             ("Unknown", "The right app type and any organization approval path depend on what GitHub resources your integration needs and the target organization’s policies."),
         ],
         "permissions": [
@@ -300,24 +300,6 @@ st.caption("OAUTH SETUP GUIDES")
 st.title("Plan your provider OAuth setup")
 st.caption("Provider setup guidance for developers building app connections for their users.")
 
-with st.expander("Developer tools", expanded=False):
-    st.caption("The connection test makes one small OpenAI web-search request. It does not generate or save a guide.")
-    if st.button("Test API connection"):
-        try:
-            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"], max_retries=0)
-            response = client.responses.create(
-                model="gpt-6-luna",
-                tools=[{"type": "web_search", "search_context_size": "low"}],
-                tool_choice="required",
-                max_tool_calls=1,
-                max_output_tokens=500,
-                input="What is the official Python documentation website? Answer in one short sentence.",
-            )
-            st.success("API connection succeeded")
-            st.write(response.output_text)
-        except Exception as exc:
-            st.error(f"API connection failed: {exc}")
-
 mode = st.radio("Guide mode", ["Saved guides", "Generate new guide"], horizontal=True)
 saved_live_guides = load_saved_live_guides()
 
@@ -478,3 +460,21 @@ else:
             mime="text/markdown",
             key=f"download_saved_example_{selected}",
         )
+
+with st.expander("Developer tools", expanded=False):
+    st.caption("The connection test makes one small OpenAI web-search request. It does not generate or save a guide.")
+    if st.button("Test API connection"):
+        try:
+            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"], max_retries=0)
+            response = client.responses.create(
+                model="gpt-6-luna",
+                tools=[{"type": "web_search", "search_context_size": "low"}],
+                tool_choice="required",
+                max_tool_calls=1,
+                max_output_tokens=500,
+                input="What is the official Python documentation website? Answer in one short sentence.",
+            )
+            st.success("API connection succeeded")
+            st.write(response.output_text)
+        except Exception as exc:
+            st.error(f"API connection failed: {exc}")
