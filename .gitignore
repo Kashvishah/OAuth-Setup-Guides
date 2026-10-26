@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.streamlit/secrets.toml
+/saved_live_guides.json
+/saved_live_guides.json.tmp
+/test_data/
